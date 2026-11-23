@@ -191,3 +191,7 @@ python3 -m unittest discover -s tests
 ## Походження
 
 Ідею конвеєра з файловим станом, детермінованим gate і дашбордом запозичено з [software-factory-claude-code-v2](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2) від ZazenCodes. Код написано з нуля.
+
+## Ліцензія
+
+[MIT](LICENSE).
