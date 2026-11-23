@@ -1,0 +1,7 @@
+forge/jobs/
+forge/inbox/imported/
+.worktrees/
+__pycache__/
+forge/inbox/*.md
+.DS_Store
+.pytest_cache/

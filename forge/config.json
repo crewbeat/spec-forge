@@ -1,0 +1,68 @@
+{
+  "base_branch": "main",
+  "concurrency": 2,
+  "max_rounds": 3,
+  "merge_method": "squash",
+  "delivery": "auto",
+  "dashboard_port": 8700,
+
+  "models": {
+    "intake": "opus",
+    "spec-writer": "opus",
+    "architect": "opus",
+    "tester": "sonnet",
+    "builder": "sonnet",
+    "reviewer-code": "haiku",
+    "reviewer-ui": "sonnet"
+  },
+
+  "human": {
+    "intake": "approve",
+    "questions": "ask",
+    "plan": "approve",
+    "design": "approve",
+    "dependencies": "approve",
+    "ui_check": "off",
+    "commit": "auto",
+    "push": "approve",
+    "pull_request": "approve",
+    "merge": "off"
+  },
+
+  "profiles": {
+    "quick": {
+      "stages": ["build", "review"]
+    },
+    "medium": {
+      "stages": ["spec", "build", "review"]
+    },
+    "full": {
+      "stages": ["spec", "design", "tests", "build", "review"],
+      "human": { "plan": "approve", "design": "approve", "commit": "approve", "push": "approve", "pull_request": "approve" },
+      "models": { "reviewer-code": "sonnet" }
+    }
+  },
+
+  "risk_models": {
+    "high": { "builder": "opus", "reviewer-code": "sonnet" }
+  },
+
+  "reviewers": {
+    "always": ["code"],
+    "surfaces": { "ui": ["ui"] }
+  },
+
+  "sources": {
+    "local": { "enabled": true, "path": "forge/inbox" },
+    "github": { "enabled": false, "label": "forge", "repo": "", "poll_seconds": 120, "comment": false }
+  },
+
+  "dependencies": { "registry_check": true, "min_age_days": 30, "ignore": [] },
+
+  "prices": {},
+
+  "protected_paths": [
+    "forge/checks.sh",
+    "forge/config.json"
+  ]
+}

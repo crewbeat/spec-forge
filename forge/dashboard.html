@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --panel: #fffdf9; --ink: #1d1b18; --muted: #6f6a61; --line: #dfd9cf;
+    --accent: #b4521f; --accent-ink: #fff; --accent-soft: #f6e3d6;
+    --ok: #2f6b45; --ok-soft: #dcebdf; --bad: #a3312b; --bad-soft: #f3dcda; --idle: #ebe6dd;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171614; --panel: #201f1c; --ink: #ece8e1; --muted: #9a9489; --line: #35322d;
+      --accent: #e0834c; --accent-ink: #1b1512; --accent-soft: #3a271b;
+      --ok: #7fc296; --ok-soft: #1f3327; --bad: #e98a83; --bad-soft: #3d2221; --idle: #2a2824;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 18px 24px 10px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .repo { color: var(--muted); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.danger { color: var(--bad); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  main { padding: 0 24px 40px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+  h2 .n { color: var(--ink); margin-left: 4px; }
+  .needs { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .board { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+  .col { min-width: 190px; }
+  .col h2 { margin-top: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; text-align: left; width: 100%; display: block; }
+  .card:hover { border-color: var(--muted); }
+  .card.needs-you { border-left: 3px solid var(--accent); }
+  .card .title { font-weight: 600; overflow-wrap: anywhere; }
+  .card .num { color: var(--muted); font: 12px var(--mono); margin-right: 6px; }
+  .card .about { color: var(--accent); margin-top: 4px; font-size: 13px; overflow-wrap: anywhere; }
+  .card .meta, .note, .ask p { overflow-wrap: anywhere; }
+  .history { font: 12px/1.8 var(--mono); }
+  .history .row { display: flex; gap: 12px; }
+  .history .t { flex: none; color: var(--muted); }
+  .history .round { margin-top: 10px; font: 600 13px var(--sans); }
+  .history .bad { color: var(--bad); }
+  .history .ok { color: var(--ok); }
+  .history .you { color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .chip { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--idle); color: var(--muted); white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.run { background: var(--accent-soft); color: var(--accent); }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -12px 0 40px rgba(0,0,0,.18); display: none; flex-direction: column; }
+  .drawer.open { display: flex; }
+  .drawer-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+  .drawer-head h3 { margin: 0 32px 4px 0; font-size: 17px; overflow-wrap: anywhere; }
+  .close { position: absolute; top: 12px; right: 14px; border: 0; background: none; font-size: 22px; cursor: pointer; color: var(--muted); }
+  .facts { color: var(--muted); font: 12px var(--mono); overflow-wrap: anywhere; }
+  .facts a { color: var(--accent); }
+  .ask { margin: 14px 20px 0; padding: 12px 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); }
+  .ask p { margin: 0 0 8px; font-weight: 600; }
+  .ask textarea { width: 100%; min-height: 70px; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--panel); resize: vertical; }
+  .ask .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .ask select { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--panel); }
+  .ask .err { color: var(--bad); font-size: 13px; }
+  .note { margin: 14px 20px 0; color: var(--muted); }
+  .tabs { padding: 12px 20px 10px; display: grid; gap: 6px; }
+  .tabrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tabrow .group { flex: none; width: 76px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  .tab { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 13px; color: var(--muted); }
+  .tab:hover { border-color: var(--muted); }
+  .tab.on { background: var(--ink); border-color: var(--ink); color: var(--panel); }
+  .tab.bad { border-color: var(--bad); color: var(--bad); }
+  .tab.ok { border-color: var(--ok); color: var(--ok); }
+  .tab.on.bad { background: var(--bad); color: var(--panel); }
+  .tab.on.ok { background: var(--ok); color: var(--panel); }
+  .doc { flex: 1; overflow: auto; margin: 0 20px 20px; padding: 14px 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+  .doc h4 { margin: 14px 0 4px; font-size: 14px; }
+  .doc h4:first-child { margin-top: 0; }
+  .doc p { margin: 6px 0; }
+  .doc ul { margin: 4px 0; padding-left: 20px; }
+  .doc pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow: auto; font: 12px/1.5 var(--mono); }
+  .doc code { font: 12px var(--mono); background: var(--panel); padding: 0 3px; border-radius: 3px; }
+  .doc .head { font: 12px var(--mono); color: var(--muted); }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); width: min(560px, 92vw); padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog h3 { margin: 0 0 12px; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  dialog input, dialog textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--bg); }
+  dialog textarea { min-height: 150px; resize: vertical; }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .offline { color: var(--bad); font-size: 12px; }
+  .status { display: flex; gap: 10px; align-items: flex-start; margin: 4px 24px 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .status.warn { border-color: var(--accent); background: var(--accent-soft); }
+  .status .what { font-weight: 600; }
+  .status .hint { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .status code, .hintline code { font: 12px var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+  .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--muted); }
+  .dot.work { background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+  .dot.you { background: var(--accent); }
+  .dot.stuck { background: var(--bad); }
+  .chip.run::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 5px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+  @media (prefers-reduced-motion: reduce) { .dot.work, .chip.run::before { animation: none; } }
+  .hintline { color: var(--muted); font-size: 13px; margin: 0 0 8px; font-weight: 400; }
+  .ask p.hintline { font-weight: 400; }
+  .feed { font: 12px/1.7 var(--mono); color: var(--muted); max-height: 260px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  .feed .row { display: flex; gap: 10px; }
+  .feed .t { flex: none; }
+  .feed .j { flex: none; color: var(--ink); }
+  .feed .e { color: var(--ink); }
+  .col h2 { cursor: help; }
+  @media (max-width: 900px) { .board { grid-template-columns: repeat(6, 220px); } main, header { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Forge</h1>
+  <span class="repo" id="repo"></span>
+  <span class="offline" id="offline" hidden>Server not reachable</span>
+  <button class="btn primary" id="new-btn">New task</button>
+</header>
+<div class="status" id="status" hidden><span class="dot" id="status-dot"></span><div><div class="what" id="status-what"></div><div class="hint" id="status-hint"></div></div></div>
+<main>
+  <section id="needs-section">
+    <h2>Needs you<span class="n" id="needs-n"></span></h2>
+    <div class="needs" id="needs"></div>
+  </section>
+  <h2 style="margin-top:22px">Pipeline</h2>
+  <div class="board" id="board"></div>
+  <h2 style="margin-top:22px">Recent activity</h2>
+  <div class="feed" id="feed"></div>
+</main>
+
+<aside class="drawer" id="drawer" aria-label="Job details">
+  <button class="close" id="close" aria-label="Close">×</button>
+  <div class="drawer-head"><h3 id="d-title"></h3><div class="facts" id="d-facts"></div></div>
+  <div id="d-ask"></div>
+  <div class="tabs" id="d-tabs"></div>
+  <div class="doc" id="d-doc"></div>
+</aside>
+
+<dialog id="new-dialog">
+  <form method="dialog" id="new-form">
+    <h3>New task</h3>
+    <label for="new-title">Title</label>
+    <input id="new-title" required maxlength="200" autocomplete="off">
+    <label for="new-body">What do you want? Plain words are fine; intake will scope it.</label>
+    <textarea id="new-body"></textarea>
+    <div class="row">
+      <button class="btn" type="button" id="new-cancel">Cancel</button>
+      <button class="btn primary" type="submit">Add to queue</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const COLUMNS = [
+  ['Intake', j => j.stage === 'intake', 'An agent reads the task and decides whether to build it, how much process it needs and how risky it is.'],
+  ['Plan', j => j.stage === 'spec' || j.stage === 'design', 'The spec (what must be true when done) and, in the full profile, the design (how it will be built).'],
+  ['Build', j => j.stage === 'tests' || j.stage === 'build' || j.stage === 'gate', 'Tests written first (full profile), then the builder, then the gate: your checks.sh, protected files, new dependencies.'],
+  ['Review', j => j.stage === 'review' || j.stage === 'ui-check', 'Reviewers with a fresh context read the diff. Jobs with an interface may stop here for you to look.'],
+  ['Deliver', j => j.stage === 'deliver', 'Commit, push, pull request, merge: each one automatic, waiting for you, or off, as config.json says.'],
+  ['Finished', j => j.stage === 'done' || j.stage === 'rejected', 'Delivered, stopped or rejected.'],
+]
+// What each gate asks of the person, and what their answer sets off.
+const HINTS = {
+  intake: 'Read intake.md below. Approve to start the work with the chosen profile (quick: no spec; medium: spec first; full: spec, design and tests first). "Reconsider" sends your comment back to intake.',
+  questions: 'An agent can\'t go on without you. Read its questions in the file below and answer in the box, or answer in the Claude Code chat. The agent then runs again with your answers.',
+  plan: 'Read spec.md below: it is what the builder will build and the reviewer will check. Approve to move on, or say what to change and the spec is rewritten.',
+  design: 'Read design.md below: the architecture, the decisions and the exact contracts. Approve to let the tester and builder start, or say what to change.',
+  dependencies: 'The change adds packages. checks.md below lists each one and how long it has existed. Allow them, or ask for the change to be made without them.',
+  ui_check: 'Run the app from the job\'s worktree (path above) and look at the change yourself. "Looks good" moves it to delivery; a change request starts another build round.',
+  blocked: 'The factory ran out of rounds or an agent is stuck. The file below says why. Write what to do differently and it starts a new round, or reject the task.',
+  agent_error: 'An agent finished twice without writing a usable file. Retry runs it again.',
+  deliver_error: 'A delivery step failed; the reason is above. Fix the cause (for example commit or stash changes in the main checkout), then Retry.',
+  commit: 'Approve to commit the change on the job\'s branch. Nothing leaves your machine.',
+  push: 'Approve to push the job\'s branch to origin.',
+  pull_request: 'Approve to open a pull request for the job\'s branch.',
+  merge: 'Approve to merge. Read build.md and the review files first: after this the change is in your base branch.',
+}
+const $ = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+let state = { jobs: [], profiles: [] }
+let openId = null, openFile = null, drawerKey = ''
+const HISTORY = 'History'
+
+function dur(s) {
+  if (s < 60) return s + 's'
+  if (s < 3600) return Math.floor(s / 60) + 'm'
+  return Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm'
+}
+const needsYou = j => j.waiting && !j.decision
+const tokens = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n)
+const spent = j => j.tokens ? tokens(j.tokens) + ' tokens' + (j.cost != null ? ' (~$' + j.cost.toFixed(2) + ')' : '') : ''
+const gateName = g => g.replace(/_/g, ' ')
+
+function chips(j) {
+  const out = []
+  if (j.profile) out.push(`<span class="chip">${esc(j.profile)}</span>`)
+  if (j.intake && j.intake.risk) out.push(`<span class="chip${j.intake.risk === 'high' ? ' bad' : ''}">risk ${esc(j.intake.risk)}</span>`)
+  if (j.round) out.push(`<span class="chip">round ${j.round}</span>`)
+  if (j.stage !== 'intake' && j.stage !== 'done' && j.stage !== 'rejected') out.push(`<span class="chip">${esc(j.stage)}</span>`)
+  if (Object.keys(j.tests || {}).length) out.push(`<span class="chip">${Object.keys(j.tests).length} locked tests</span>`)
+  if (j.gate) out.push(`<span class="chip ${j.gate === 'PASS' ? 'ok' : 'bad'}">gate ${esc(j.gate)}</span>`)
+  for (const [name, v] of Object.entries(j.reviews || {})) out.push(`<span class="chip ${v === 'PASS' ? 'ok' : 'bad'}">${esc(name)} ${esc(v)}</span>`)
+  for (const key of j.inflight || []) out.push(`<span class="chip run">${esc(key)} working</span>`)
+  for (const step of j.delivered || []) out.push(`<span class="chip ok">${esc(gateName(step))}</span>`)
+  if (j.stage === 'rejected') out.push('<span class="chip bad">rejected</span>')
+  return out.join('')
+}
+
+const mmss = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+
+// One line that says whether anything is moving, and what would make it move.
+function renderStatus() {
+  const f = state.factory
+  $('status').hidden = !f
+  if (!f) return
+  const running = state.jobs.flatMap(j => (j.running || []).map(r => `${String(j.number).padStart(3, '0')} ${r.key}${r.model ? ' (' + r.model + ')' : ''} ${mmss(r.seconds)}`))
+  const stale = Math.max(0, ...state.jobs.map(j => j.decided_s || 0))
+  const seen = f.last_command_s == null ? 'The factory hasn\'t run here yet.' : `The session last ran the factory ${dur(f.last_command_s)} ago.`
+  let dot = '', what = '', hint = '', warn = false
+  const agents = state.jobs.flatMap(j => (j.running || []).map(r => ({ ...r, job: String(j.number).padStart(3, '0') })))
+  const absent = agents.filter(r => r.quiet_s == null && r.seconds >= 120)
+  const silent = agents.filter(r => r.quiet_s != null && r.quiet_s >= 900)
+  if (absent.length) {
+    dot = 'stuck'; warn = true
+    what = `Not started: ${absent.map(r => `${r.job} ${r.key}`).join(', ')}. The factory asked for the agent ${dur(absent[0].seconds)} ago, but the session never started it.`
+    hint = 'Look at the Claude Code session that runs the factory: it has probably stopped to ask you something. To start the agent again, type <code>/forge run</code> there.'
+  } else if (silent.length && silent.length === agents.length) {
+    dot = 'stuck'; warn = true
+    what = `No sign of life: ${silent.map(r => `${r.job} ${r.key} silent for ${dur(r.quiet_s)}`).join(', ')}.`
+    hint = 'The agent has written nothing for a long time. Check the Claude Code session; if it has ended, type <code>/forge run</code> to start the agent again.'
+  } else if (running.length) {
+    dot = 'work'
+    what = `${running.length} agent${running.length > 1 ? 's' : ''} working: ${running.join(' · ')}`
+    hint = f.needs_you ? 'You can answer the waiting jobs meanwhile; your answers are applied when an agent finishes.' : 'Nothing needs you right now. An agent usually takes from half a minute to several minutes.'
+  } else if (f.undelivered && !f.watching && stale >= 8) {
+    dot = 'stuck'; warn = true
+    what = 'Nothing is moving: the Claude Code session is not watching the dashboard.'
+    hint = `Your decisions are saved. To continue, type <code>/forge poll</code> in the Claude Code session that runs the factory. ${esc(seen)}`
+  } else if (f.undelivered) {
+    dot = 'work'
+    what = 'Picking up your decision…'
+    hint = f.watching ? 'The session is watching; it continues within a few seconds.' : esc(seen)
+  } else if (f.needs_you) {
+    dot = 'you'
+    what = `Waiting for you: ${f.needs_you} job${f.needs_you > 1 ? 's' : ''}. Open a card under "Needs you".`
+    hint = f.watching ? 'The session is watching: it continues as soon as you answer here or in the chat.'
+      : 'The session is <strong>not</strong> watching this page. After you answer here, type <code>/forge poll</code> in Claude Code.'
+    warn = !f.watching
+  } else if (f.held && f.held === f.live) {
+    dot = 'stuck'; warn = true
+    what = 'Every remaining job waits for another job that will never finish.'
+    hint = 'Open the card to see what it waits for. Change it in Claude Code with <code>forge/bin/forge after &lt;job&gt; [jobs...]</code>; with no jobs listed it starts right away.'
+  } else if (f.live) {
+    dot = 'stuck'; warn = true
+    what = 'Jobs are in progress but no agent is running.'
+    hint = `The session may have ended. Type <code>/forge run</code> in Claude Code to resume every job. ${esc(seen)}`
+  } else {
+    what = state.jobs.length ? 'All jobs are finished.' : 'No jobs yet.'
+    hint = 'Add one with New task, drop a .md file into forge/inbox/, or type <code>/forge new</code> in Claude Code.'
+  }
+  $('status').className = 'status' + (warn ? ' warn' : '')
+  $('status-dot').className = 'dot ' + dot
+  $('status-what').textContent = what
+  setHtml($('status-hint'), hint)
+}
+
+const EVENT_TEXT = { after: 'starts after', base: 'base:', spawn: 'agent started', waiting: 'waits for you', decision: 'you decided', stage: 'moved to', round: 'round', gate: 'gate', delivered: 'delivered', created: 'created from', accepted: 'accepted, profile', tests: 'tests', review: 'review', done: 'done', rejected: 'rejected' }
+function renderFeed() {
+  const rows = state.activity || []
+  setHtml($('feed'), rows.length ? rows.map(r => {
+    const time = new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return `<div class="row"><span class="t">${esc(time)}</span><span class="j">${String(r.number).padStart(3, '0')}</span><span><span class="e">${esc(EVENT_TEXT[r.event] || r.event)}</span> ${esc(r.detail)}</span></div>`
+  }).join('') : 'Nothing has happened yet.')
+}
+
+function card(j) {
+  const waits = needsYou(j)
+  const meta = [esc(j.source.kind)]
+  if (j.started) meta.push(dur(j.elapsed_s))
+  const waited = j.waited_s + j.waiting_now_s
+  if (waited) meta.push('waited ' + dur(waited))
+  if (spent(j)) meta.push(spent(j))
+  return `<button class="card${waits ? ' needs-you' : ''}" data-id="${esc(j.id)}">
+    <div class="title"><span class="num">${String(j.number).padStart(3, '0')}</span>${esc(j.title)}</div>
+    ${waits ? `<div class="about">${esc(j.waiting.about)}</div>` : ''}
+    ${j.decision ? `<div class="meta">Your answer (${esc(j.decision.decision)}) is saved, not applied yet</div>` : ''}
+    ${!j.started ? `<div class="meta">${j.blocked ? esc(j.blocked) : 'Queued: starts when the session runs the factory'}</div>` : ''}
+    <div class="chips">${chips(j)}</div>
+    <div class="meta">${meta.join(' · ')}</div>
+  </button>`
+}
+
+const shown = new Map()
+function setHtml(el, html) {
+  if (shown.get(el) === html) return
+  shown.set(el, html)
+  el.innerHTML = html
+}
+
+function render() {
+  $('repo').textContent = state.repo || ''
+  renderStatus()
+  renderFeed()
+  const needs = state.jobs.filter(needsYou)
+  $('needs-n').textContent = needs.length || ''
+  // Replace the DOM only when something changed, so focus and hover survive a poll.
+  setHtml($('needs'), needs.length ? needs.map(card).join('') : '<div class="empty">Nothing is waiting for you.</div>')
+  setHtml($('board'), COLUMNS.map(([label, test, help]) => {
+    const jobs = state.jobs.filter(test)
+    return `<div class="col"><h2 title="${esc(help)}">${label}<span class="n">${jobs.length || ''}</span></h2>${jobs.map(card).join('') || '<div class="empty">—</div>'}</div>`
+  }).join(''))
+  renderDrawer()
+}
+
+function inline(s) {
+  return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+}
+
+// A small, safe Markdown view: everything is escaped first.
+function markdown(src) {
+  const lines = src.split('\n')
+  let html = '', i = 0, list = false
+  const closeList = () => { if (list) { html += '</ul>'; list = false } }
+  const head = []
+  while (i < lines.length && /^[A-Z][A-Z _-]*:\s/.test(lines[i])) head.push(lines[i++])
+  if (head.length) html += `<p class="head">${head.map(esc).join('<br>')}</p>`
+  for (; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.startsWith('```')) {
+      closeList()
+      const code = []
+      for (i++; i < lines.length && !lines[i].startsWith('```'); i++) code.push(lines[i])
+      html += `<pre>${esc(code.join('\n'))}</pre>`
+    } else if (/^#{1,6}\s/.test(line)) {
+      closeList(); html += `<h4>${inline(line.replace(/^#+\s/, ''))}</h4>`
+    } else if (/^\s*[-*]\s/.test(line)) {
+      if (!list) { html += '<ul>'; list = true }
+      html += `<li>${inline(line.replace(/^\s*[-*]\s/, ''))}</li>`
+    } else if (line.trim() === '') {
+      closeList()
+    } else {
+      closeList(); html += `<p>${inline(line)}</p>`
+    }
+  }
+  closeList()
+  return html
+}
+
+// The job's own story: every round, what the gate and the reviewers said, where it waited for the person.
+function history(j) {
+  const clock = at => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  let html = '<div class="history">'
+  for (const e of j.events || []) {
+    if (e.event === 'stage') continue
+    if (e.event === 'round') { html += `<div class="round">Round ${esc(e.detail)}</div>`; continue }
+    const tone = /FAIL|CHANGES|failed|rejected/.test(e.event + ' ' + e.detail) ? 'bad'
+      : /PASS/.test(e.detail) || e.event === 'delivered' || e.event === 'done' ? 'ok'
+      : e.event === 'waiting' || e.event === 'decision' ? 'you' : ''
+    html += `<div class="row"><span class="t">${esc(clock(e.at))}</span><span class="${tone}">${esc(EVENT_TEXT[e.event] || e.event)} ${esc(e.detail)}</span></div>`
+  }
+  const runs = (j.usage || []).filter(u => u.tokens != null)
+  if (runs.length) {
+    html += '<div class="round">Agent runs</div>'
+    for (const u of runs) html += `<div class="row"><span class="t">round ${esc(u.round)}</span><span>${esc(u.key)} · ${esc(u.model || '')} · ${dur(u.seconds)} · ${tokens(u.tokens)} tokens</span></div>`
+  }
+  return html + '</div><p class="head">Each round keeps its own files: open the round-N/ tabs above to read the checks and what each reviewer asked for.</p>'
+}
+
+// The job's files as a person thinks of them: its documents, then one row per round.
+const DOC_NAMES = { 'task.md': 'Task', 'intake.md': 'Intake', 'spec.md': 'Spec', 'design.md': 'Design', 'tests.md': 'Tests',
+  'build.md': 'Build report', 'decisions.md': 'Your decisions', 'pr-body.md': 'PR text' }
+const ROUND_NAMES = { 'checks.md': 'Checks', 'checks.log': 'Full log' }
+function fileGroups(j) {
+  const docs = [], yours = [], older = [], rounds = new Map()
+  for (const f of j.files) {
+    const round = f.match(/^round-(\d+)\/(.+)$/)
+    if (round) {
+      const name = round[2], review = name.match(/^review-(.+)\.md$/)
+      const verdict = review ? ((j.round_verdicts || {})[round[1]] || {})[review[1]] : name === 'checks.md' ? ((j.round_verdicts || {})[round[1]] || {}).gate : null
+      const tone = verdict ? (verdict === 'PASS' ? 'ok' : 'bad') : ''
+      const label = review ? `Review: ${review[1]}` : ROUND_NAMES[name] || name
+      if (!rounds.has(round[1])) rounds.set(round[1], [])
+      rounds.get(round[1]).push({ f, label: verdict ? `${label} · ${verdict}` : label, tone, order: name === 'checks.md' ? 0 : name === 'checks.log' ? 3 : 1 })
+    } else if (DOC_NAMES[f]) docs.push({ f, label: DOC_NAMES[f], order: Object.keys(DOC_NAMES).indexOf(f) })
+    else if (/^(answers|feedback)-\d+\.md$/.test(f)) yours.push({ f, label: f.replace(/^answers-(\d+)\.md$/, 'Your answers $1').replace(/^feedback-(\d+)\.md$/, 'Your feedback $1'), order: 0 })
+    else older.push({ f, label: f.replace(/^(\w+)\.v(\d+)\.md$/, (m, name, k) => `${DOC_NAMES[name + '.md'] || name} v${k}`), order: 0 })
+  }
+  const sorted = list => list.sort((a, b) => a.order - b.order)
+  const rows = [['Job', [{ f: HISTORY, label: 'History' }, ...sorted(docs), ...yours]]]
+  for (const [n, list] of [...rounds].sort((a, b) => a[0] - b[0])) rows.push([`Round ${n}`, sorted(list)])
+  if (older.length) rows.push(['Replaced', older])
+  return rows
+}
+
+function askPanel(j) {
+  if (j.blocked) return `<div class="note">${esc(j.blocked)} It starts by itself after that.</div>`
+  if (j.decision) return `<div class="note">Your answer (${esc(j.decision.decision)}) is saved. It is applied when the Claude Code session next runs the factory; the bar at the top of the page says whether that is happening.</div>`
+  if ((j.running || []).some(r => r.quiet_s == null && r.seconds >= 120)) return `<div class="note">The factory asked for ${j.running.map(r => esc(r.key)).join(', ')}, but the session never started it. Look at the Claude Code session: it has probably stopped to ask you something.</div>`
+  if ((j.running || []).length) return `<div class="note">${j.running.map(r => esc(r.key)).join(', ')} working. Its file appears in the tabs below when it finishes.</div>`
+  if (!needsYou(j)) return j.note ? `<div class="note">${esc(j.note)}</div>` : ''
+  const gate = j.waiting.gate
+  const answers = Object.entries(j.answers)
+  const needsText = answers.some(([d]) => d === 'changes')
+  const profile = gate === 'intake' && j.intake && j.intake.decision !== 'REJECT'
+    ? `<label>Profile <select id="ask-profile">${state.profiles.map(p => `<option${p === j.intake.profile ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></label>` : ''
+  const placeholder = gate === 'questions' ? 'Your answers' : 'What should change? Required for a change request.'
+  return `<div class="ask">
+    <p>${esc(j.waiting.about)}</p>
+    ${HINTS[gate] ? `<p class="hintline">${esc(HINTS[gate])}</p>` : ''}
+    ${needsText || gate !== 'agent_error' ? `<textarea id="ask-comment" placeholder="${esc(needsText ? placeholder : 'Optional note')}"></textarea>` : ''}
+    <div class="row">
+      ${profile}
+      ${answers.map(([d, label]) => `<button class="btn ${d === 'reject' ? 'danger' : d === answers[0][0] ? 'primary' : ''}" data-decision="${esc(d)}">${esc(label)}</button>`).join('')}
+      <span class="err" id="ask-err"></span>
+    </div>
+  </div>`
+}
+
+async function renderDrawer(force) {
+  const j = state.jobs.find(x => x.id === openId)
+  $('drawer').classList.toggle('open', !!j)
+  if (!j) return
+  // Rebuild only when the job changed, so typing in the comment box isn't interrupted.
+  const key = [j.id, j.stage, j.round, JSON.stringify(j.waiting), JSON.stringify(j.decision), j.files.join(','), j.note, j.tokens, (j.inflight || []).join(','), (j.events || []).length, openFile].join('|')
+  if (key === drawerKey && !force) return
+  drawerKey = key
+  $('d-title').textContent = j.title
+  const facts = [j.id, 'stage ' + j.stage]
+  if (j.branch) facts.push(j.branch)
+  if (j.worktree) facts.push(j.worktree)
+  if (j.agent_s) facts.push('agents worked ' + dur(j.agent_s))
+  if (spent(j)) facts.push(spent(j))
+  const parts = j.token_parts || {}
+  if (parts.output) facts.push(`in ${tokens(parts.input + parts.cache_write)} · out ${tokens(parts.output)} · reread from cache ${tokens(parts.cache_read)}`)
+  let html = facts.map(esc).join(' · ')
+  if (j.pr_url && /^https:\/\//.test(j.pr_url)) html += ` · <a href="${esc(j.pr_url)}" target="_blank" rel="noopener">pull request</a>`
+  $('d-facts').innerHTML = html
+  $('d-ask').innerHTML = askPanel(j)
+  if (!openFile || (openFile !== HISTORY && !j.files.includes(openFile))) {
+    openFile = (j.waiting && j.waiting.file && j.files.includes(j.waiting.file)) ? j.waiting.file : j.files[j.files.length - 1]
+    drawerKey = ''
+    return renderDrawer()
+  }
+  $('d-tabs').innerHTML = fileGroups(j).map(([group, list]) => `<div class="tabrow"><span class="group">${esc(group)}</span>${
+    list.map(t => `<button class="tab ${t.tone || ''}${t.f === openFile ? ' on' : ''}" data-file="${esc(t.f)}" title="${esc(t.f)}">${esc(t.label)}</button>`).join('')}</div>`).join('')
+  if (openFile === HISTORY) { $('d-doc').innerHTML = history(j); return }
+  try {
+    const res = await fetch(`/api/file?job=${encodeURIComponent(j.id)}&path=${encodeURIComponent(openFile)}`, { cache: 'no-store' })
+    const text = res.ok ? await res.text() : ''
+    $('d-doc').innerHTML = openFile.endsWith('.log') ? `<pre>${esc(text)}</pre>` : markdown(text)
+  } catch { $('d-doc').textContent = 'Could not load the file.' }
+}
+
+async function decide(decision) {
+  const comment = $('ask-comment') ? $('ask-comment').value : ''
+  const profile = decision === 'approve' && $('ask-profile') ? $('ask-profile').value : null
+  const res = await fetch('/api/decide', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job: openId, decision, comment, profile }),
+  })
+  if (!res.ok) { $('ask-err').textContent = (await res.json()).error || 'Failed'; return }
+  await poll()
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/api/state', { cache: 'no-store' })
+    state = await res.json()
+    $('offline').hidden = true
+    render()
+  } catch { $('offline').hidden = false }
+}
+
+document.addEventListener('click', e => {
+  const cardEl = e.target.closest('.card')
+  if (cardEl) { openId = cardEl.dataset.id; openFile = null; drawerKey = ''; renderDrawer(); return }
+  const tab = e.target.closest('.tab')
+  if (tab) { openFile = tab.dataset.file; renderDrawer(); return }
+  const btn = e.target.closest('[data-decision]')
+  if (btn) decide(btn.dataset.decision)
+})
+$('close').onclick = () => { openId = null; renderDrawer() }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('new-dialog').open) { openId = null; renderDrawer() } })
+$('new-btn').onclick = () => $('new-dialog').showModal()
+$('new-cancel').onclick = () => $('new-dialog').close()
+$('new-form').onsubmit = async e => {
+  e.preventDefault()
+  const res = await fetch('/api/jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: $('new-title').value, body: $('new-body').value }),
+  })
+  if (res.ok) { $('new-form').reset(); $('new-dialog').close(); poll() }
+}
+poll()
+setInterval(poll, 2000)
+</script>
+</body>
+</html>

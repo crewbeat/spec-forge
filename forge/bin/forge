@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""The factory's command line. The only writer of job.json.
+
+  forge run                         a session starts or resumes: pull sources, step every job
+  forge poll                        mid-session: pick up decisions and new tasks
+  forge tick <job> <agent-key>      an agent finished: step that job
+  forge new "<title>" [--stdin]     a manual task; the description comes on stdin
+  forge decide <job> <approve|changes|reject> [--comment T | --stdin] [--profile P]
+  forge status                      one line per job
+  forge usage                       tokens per agent run, read from Claude Code's transcripts
+  forge watch [--timeout S]         block until a decision or a new task arrives
+  forge serve [--port N]            the dashboard
+  forge clean [--force]             remove the worktrees of finished jobs
+
+`run`, `poll` and `tick` print one JSON action per line: spawn, wait, hold, watch or note.
+"""
+
+import argparse
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
+from forgelib import core, pipeline, server, sources, usage  # noqa: E402
+from forgelib.core import Refused  # noqa: E402
+
+
+def emit(actions):
+    for action in actions:
+        print(json.dumps(action, ensure_ascii=False))
+
+
+def summary_note():
+    jobs = core.all_jobs()
+    live = [j for j in jobs if j["stage"] not in core.TERMINAL]
+    waiting = [j for j in live if j["waiting"] and not j["decision"]]
+    busy = [j for j in live if j["inflight"]]
+    note = {"action": "note", "running_agents": sum(len(j["inflight"]) for j in busy),
+            "waiting_on_person": [j["id"] for j in waiting],
+            "finished": len(jobs) - len(live), "total": len(jobs)}
+    if waiting and not busy and not watcher_alive():
+        # Nothing will wake the session when the person answers on the dashboard, unless it watches.
+        return [note, {"action": "watch", "run_in_background": "forge/bin/forge watch",
+                       "why": "Jobs wait on the person and no agent is running. Start this command in the "
+                              "background now, before you end your turn. When it exits, run forge/bin/forge poll."}]
+    return [note]
+
+
+def watcher_alive():
+    return core.watcher_alive()
+
+
+def heartbeat():
+    """Lets the dashboard say when the session last ran the factory."""
+    core.JOBS.mkdir(parents=True, exist_ok=True)
+    (core.JOBS / ".heartbeat").write_text(core.now())
+
+
+def pull(force=False):
+    created = sources.pull(force)
+    emit({"action": "note", "new_job": j["id"], "title": j["title"]} for j in created)
+    emit({"action": "note", "problem": text} for text in sources.problems)
+
+
+def cmd_run(args):
+    heartbeat()
+    pull(force=True)
+    emit(pipeline.schedule(resume=True))
+    emit(summary_note())
+
+
+def cmd_poll(args):
+    heartbeat()
+    pull()
+    emit(pipeline.schedule(only=[]))
+    emit(summary_note())
+
+
+def cmd_tick(args):
+    heartbeat()
+    job = core.load(core.resolve(args.job))
+    pipeline.finished(job, args.key, args.tokens)
+    core.save(job)
+    pull()
+    emit(pipeline.schedule(only=[job["id"]]))
+    emit(summary_note())
+
+
+def cmd_new(args):
+    body = sys.stdin.read() if args.stdin else ""
+    job = core.create_job({"source": "manual", "ref": None, "title": args.title, "body": body, "after": args.after})
+    print(job["id"])
+
+
+def cmd_after(args):
+    job = core.load(core.resolve(args.job))
+    if job["started"]:
+        raise Refused(f"{job['id']} has already started; only a job that hasn't can be made to wait")
+    job["after"] = [core.resolve(ref) for ref in args.jobs]
+    core.event(job, "after", ", ".join(job["after"]) or "nothing")
+    core.save(job)
+    print(f"{job['id']}: starts after " + (", ".join(job["after"]) or "nothing; it can start now"))
+
+
+def cmd_decide(args):
+    job = core.load(core.resolve(args.job))
+    comment = sys.stdin.read() if args.stdin else (args.comment or "")
+    pipeline.decide(job, args.decision, comment, args.profile)
+    core.save(job)
+    print(f"{job['id']}: {job['decision']['gate']} -> {args.decision}")
+
+
+def duration(seconds):
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m"
+
+
+def usage_text(job):
+    tokens = sum(u["tokens"] or 0 for u in job["usage"])
+    if not tokens:
+        return ""
+    cost = core.cost(job)
+    return f" tokens {tokens:,}" + (f" (~${cost:.2f})" if cost is not None else "")
+
+
+def cmd_status(args):
+    jobs = core.all_jobs()
+    if not jobs:
+        print("No jobs yet.")
+        return
+    for job in jobs:
+        waiting = job["waiting"]
+        state = job["stage"]
+        if waiting:
+            state += f" · waits: {waiting['gate']}" + (" (decided)" if job["decision"] else "")
+        held = "" if job["started"] else core.blocked_text(core.blockers(job, jobs))
+        elapsed = duration(core.seconds_between(job["started"], job["ended"])) if job["started"] else "-"
+        print(f"{job['id']:<44} {state:<32} profile {job['profile'] or '-':<7} round {job['round']} "
+              f"time {elapsed} waited {duration(job['waited_s'])}{usage_text(job)}"
+              + (f"  {waiting['about']}" if waiting else f"  {held}" if held else f"  {job['note']}" if job["note"] else ""))
+
+
+def cmd_usage(args):
+    for job in core.all_jobs():
+        usage.fill(job)
+        core.save(job)
+        print(f"{job['id']}{usage_text(job)}")
+        for run in job["usage"]:
+            if run.get("tokens") is None:
+                detail = "no transcript found"
+            else:
+                detail = (f"{run['tokens']:,} tokens" + (f" (in {run['input']:,} · written to cache "
+                          f"{run['cache_write']:,} · out {run['output']:,} · read from cache {run['cache_read']:,})"
+                          if "input" in run else ""))
+            print(f"  round {run['round']} {run['key']:<14} {run['model'] or '-':<7} {duration(run['seconds']):>5}  {detail}")
+
+
+def cmd_watch(args):
+    if watcher_alive():
+        print("Another watcher is already running. Do nothing: it will report.")
+        sys.exit(4)
+    core.JOBS.mkdir(parents=True, exist_ok=True)
+    pidfile = core.JOBS / ".watch.pid"
+    pidfile.write_text(str(os.getpid()))
+    try:
+        watch(args.timeout)
+    finally:
+        pidfile.unlink()
+
+
+def watch(timeout):
+    started = core.now()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        jobs = core.all_jobs()
+        decided = [j["id"] for j in jobs if j["waiting"] and j["decision"]]
+        fresh = [j["id"] for j in jobs if not j["started"] and j["created"] >= started]
+        if decided or fresh or sources.pending():
+            print(json.dumps({"decided": decided, "new_jobs": fresh, "inbox": sources.pending()}))
+            print("Something changed: run `forge/bin/forge poll`.")
+            return
+        time.sleep(2)
+    print("Nothing changed before the timeout.")
+    sys.exit(3)
+
+
+def cmd_serve(args):
+    server.serve(args.port)
+
+
+def cmd_clean(args):
+    for job in core.all_jobs():
+        worktree = job.get("worktree")
+        if job["stage"] not in core.TERMINAL or not worktree or not Path(worktree).exists():
+            continue
+        dirty = core.git(worktree, "status", "--porcelain").strip()
+        if dirty and not args.force:
+            print(f"{job['id']}: kept, its worktree has uncommitted changes (--force removes it)")
+            continue
+        core.git(core.REPO, "worktree", "remove", "--force", worktree)
+        print(f"{job['id']}: worktree removed, branch {job['branch']} kept")
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="forge", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("run").set_defaults(func=cmd_run)
+    sub.add_parser("poll").set_defaults(func=cmd_poll)
+    p = sub.add_parser("tick")
+    p.add_argument("job")
+    p.add_argument("key")
+    p.add_argument("--tokens", type=int)
+    p.set_defaults(func=cmd_tick)
+    p = sub.add_parser("new")
+    p.add_argument("title")
+    p.add_argument("--stdin", action="store_true")
+    p.add_argument("--after", action="append", default=[], help="a job this one waits for; repeatable")
+    p.set_defaults(func=cmd_new)
+    p = sub.add_parser("after")
+    p.add_argument("job")
+    p.add_argument("jobs", nargs="*")
+    p.set_defaults(func=cmd_after)
+    p = sub.add_parser("decide")
+    p.add_argument("job")
+    p.add_argument("decision", choices=["approve", "changes", "reject"])
+    p.add_argument("--comment")
+    p.add_argument("--stdin", action="store_true")
+    p.add_argument("--profile")
+    p.set_defaults(func=cmd_decide)
+    sub.add_parser("status").set_defaults(func=cmd_status)
+    sub.add_parser("usage").set_defaults(func=cmd_usage)
+    p = sub.add_parser("watch")
+    p.add_argument("--timeout", type=int, default=4 * 3600)
+    p.set_defaults(func=cmd_watch)
+    p = sub.add_parser("serve")
+    p.add_argument("--port", type=int)
+    p.set_defaults(func=cmd_serve)
+    p = sub.add_parser("clean")
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(func=cmd_clean)
+    args = parser.parse_args()
+    try:
+        core.config()
+        args.func(args)
+    except Refused as e:
+        print(f"forge: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
